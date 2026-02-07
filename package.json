@@ -1,0 +1,28 @@
+{
+  "name": "monclaw",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "setup": "bun src/cli/setup.ts",
+    "opencode": "opencode",
+    "typecheck": "tsc --noEmit",
+    "test:opencode:e2e": "bun tests/opencode.e2e.ts"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "1.1.53",
+    "@opencode-ai/sdk": "1.1.53",
+    "@whiskeysockets/baileys": "latest",
+    "grammy": "latest",
+    "opencode-ai": "1.1.53",
+    "pino": "latest",
+    "qrcode-terminal": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/qrcode-terminal": "latest",
+    "typescript": "latest"
+  }
+}
