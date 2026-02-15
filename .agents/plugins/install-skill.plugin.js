@@ -1,37 +1,11 @@
 import { tool } from "@opencode-ai/plugin"
-
-const SEP = "/"
-const SKILLS_DIR = joinPath(Bun.cwd, ".agents", "skills")
-
-function joinPath(...parts) {
-  return parts
-    .filter((part) => part !== "")
-    .map((part, index) => {
-      if (index === 0) return part.replace(/\/+$/g, "")
-      return part.replace(/^\/+/g, "").replace(/\/+$/g, "")
-    })
-    .filter(Boolean)
-    .join(SEP)
-}
-
-function basename(input) {
-  const idx = input.lastIndexOf(SEP)
-  return idx === -1 ? input : input.slice(idx + 1)
-}
-
-async function run(cmd) {
-  const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" })
-  await proc.exited
-  return proc.exitCode === 0
-}
-
-async function exists(path) {
-  return run(["test", "-e", path])
-}
+import * as path from "node:path"
+import { existsSync } from "node:fs"
+import { mkdir, rm, cp } from "node:fs/promises"
 
 function parseGithubTreeUrl(input) {
   const source = input.trim()
-  const tree = source.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/tree\/([^/]+)\/(.+)$/)
+  const tree = source.match(/^https?:\/\/github\.com\/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)\/tree\/([a-zA-Z0-9_.-]+)\/(.+)$/)
   if (!tree) return null
   return {
     repo: tree[1],
@@ -41,10 +15,15 @@ function parseGithubTreeUrl(input) {
 }
 
 function safeName(input) {
-  return input.replace(/[^a-zA-Z0-9._-]/g, "-")
+  if (input === "." || input === "..") return null
+  const sanitized = input.replace(/[^a-zA-Z0-9._-]/g, "-")
+  if (sanitized === "." || sanitized === "..") return null
+  return sanitized
 }
 
 export default async ({ $ }) => {
+  const SKILLS_DIR = path.join(process.cwd(), ".agents", "skills")
+
   return {
     tool: {
       install_skill: tool({
@@ -54,28 +33,40 @@ export default async ({ $ }) => {
           name: tool.schema.string().optional().describe("Optional target skill folder name"),
         },
         async execute(args) {
-          await run(["mkdir", "-p", SKILLS_DIR])
+          await mkdir(SKILLS_DIR, { recursive: true })
 
           const resolved = parseGithubTreeUrl(args.source)
           if (!resolved) {
-            throw new Error("Unsupported source. Use a GitHub tree URL to the skill folder.")
+            throw new Error("Unsupported source. Use a valid GitHub tree URL (e.g. https://github.com/user/repo/tree/branch/folder).")
           }
-          const sourceName = basename(resolved.subpath)
-          const targetName = safeName((args.name || sourceName).trim())
-          const targetDir = joinPath(SKILLS_DIR, targetName)
 
-          if (await exists(targetDir)) {
+          const sourceName = path.basename(resolved.subpath)
+          const nameInput = (args.name || sourceName).trim()
+          const targetName = safeName(nameInput)
+
+          if (!targetName) {
+             throw new Error("Invalid skill name.")
+          }
+
+          const targetDir = path.resolve(SKILLS_DIR, targetName)
+
+          if (!targetDir.startsWith(SKILLS_DIR)) {
+             throw new Error("Invalid skill name (path traversal detected).")
+          }
+
+          if (existsSync(targetDir)) {
             return `Skill '${targetName}' already exists at .agents/skills/${targetName}`
           }
 
-          const tmpDir = joinPath(
-            Bun.cwd,
+          const tmpDir = path.join(
+            process.cwd(),
             ".data",
             `tmp-skill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           )
+
           try {
-            await $`mkdir -p ${tmpDir}`
-            // Sparse checkout keeps transfer focused on the requested skill folder.
+            await mkdir(tmpDir, { recursive: true })
+
             await $`git -C ${tmpDir} init`
             await $`git -C ${tmpDir} remote add origin https://github.com/${resolved.repo}.git`
             await $`git -C ${tmpDir} config core.sparseCheckout true`
@@ -83,16 +74,17 @@ export default async ({ $ }) => {
             await $`git -C ${tmpDir} fetch --depth=1 origin ${resolved.ref}`
             await $`git -C ${tmpDir} checkout FETCH_HEAD`
 
-            const srcDir = joinPath(tmpDir, resolved.subpath)
-            if (!(await exists(srcDir))) throw new Error("Skill source folder not found after checkout.")
-            if (!(await exists(joinPath(srcDir, "SKILL.md")))) throw new Error("Missing SKILL.md in skill folder.")
+            const srcDir = path.join(tmpDir, resolved.subpath)
 
-            await $`mkdir -p ${targetDir}`
-            await $`cp -R ${srcDir}/. ${targetDir}`
+            if (!existsSync(srcDir)) throw new Error("Skill source folder not found after checkout.")
+            if (!existsSync(path.join(srcDir, "SKILL.md"))) throw new Error("Missing SKILL.md in skill folder.")
+
+            await mkdir(targetDir, { recursive: true })
+            await cp(srcDir, targetDir, { recursive: true })
 
             return `Installed skill '${targetName}' to .agents/skills/${targetName}`
           } finally {
-            await $`rm -rf ${tmpDir}`
+            await rm(tmpDir, { recursive: true, force: true })
           }
         },
       }),

@@ -1,40 +1,18 @@
 import { tool } from "@opencode-ai/plugin"
+import * as path from "node:path"
+import { mkdir, appendFile, writeFile } from "node:fs/promises"
+import { existsSync } from "node:fs"
 
-const SEP = "/"
-const memoryFile = joinPath(Bun.cwd, ".data", "workspace", "MEMORY.md")
-
-function joinPath(...parts) {
-  return parts
-    .filter((part) => part !== "")
-    .map((part, index) => {
-      if (index === 0) return part.replace(/\/+$/g, "")
-      return part.replace(/^\/+/g, "").replace(/\/+$/g, "")
-    })
-    .filter(Boolean)
-    .join(SEP)
-}
-
-function dirname(input) {
-  const idx = input.lastIndexOf(SEP)
-  if (idx <= 0) return "."
-  return input.slice(0, idx)
-}
-
-async function run(cmd) {
-  const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" })
-  await proc.exited
-}
-
-async function ensureMemoryFile() {
-  await run(["mkdir", "-p", dirname(memoryFile)])
-  try {
-    await Bun.file(memoryFile).text()
-  } catch {
-    await Bun.write(memoryFile, "# Memory\n")
+async function ensureMemoryFile(memoryFile) {
+  await mkdir(path.dirname(memoryFile), { recursive: true })
+  if (!existsSync(memoryFile)) {
+    await writeFile(memoryFile, "# Memory\n")
   }
 }
 
 export default async () => {
+  const memoryFile = path.join(process.cwd(), ".data", "workspace", "MEMORY.md")
+
   return {
     tool: {
       save_memory: tool({
@@ -45,9 +23,8 @@ export default async () => {
         async execute(args) {
           const fact = args.fact.trim()
           if (!fact) return "Skipped: empty memory fact."
-          await ensureMemoryFile()
-          const existing = await Bun.file(memoryFile).text()
-          await Bun.write(memoryFile, `${existing}- ${fact}\n`)
+          await ensureMemoryFile(memoryFile)
+          await appendFile(memoryFile, `- ${fact}\n`)
           return "Saved durable memory."
         },
       }),

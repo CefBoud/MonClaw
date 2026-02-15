@@ -1,23 +1,8 @@
+import { mkdir, readdir, rm } from "node:fs/promises"
 import { dirname } from "./path"
 
-type RunResult = {
-  code: number
-  stdout: string
-}
-
-async function run(cmd: string[], cwd?: string): Promise<RunResult> {
-  const proc = Bun.spawn(cmd, {
-    cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-  const stdout = await new Response(proc.stdout).text()
-  await proc.exited
-  return { code: proc.exitCode ?? 1, stdout }
-}
-
 export async function ensureDir(dir: string): Promise<void> {
-  await run(["mkdir", "-p", dir])
+  await mkdir(dir, { recursive: true })
 }
 
 export async function readText(file: string): Promise<string> {
@@ -39,14 +24,14 @@ export async function writeJson(file: string, data: unknown): Promise<void> {
 }
 
 export async function listFiles(dir: string): Promise<string[]> {
-  const result = await run(["ls", "-1", dir])
-  if (result.code !== 0) return []
-  return result.stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
+  try {
+    const files = await readdir(dir)
+    return files.filter((f) => !f.startsWith("."))
+  } catch {
+    return []
+  }
 }
 
 export async function removeFile(file: string): Promise<void> {
-  await run(["rm", "-f", file])
+  await rm(file, { force: true })
 }

@@ -1,26 +1,11 @@
 import { tool } from "@opencode-ai/plugin"
-
-const SEP = "/"
-const lastChannelFile = joinPath(Bun.cwd, ".data", "last-channel.json")
-const outboxDir = joinPath(Bun.cwd, ".data", "outbox")
-
-function joinPath(...parts) {
-  return parts
-    .filter((part) => part !== "")
-    .map((part, index) => {
-      if (index === 0) return part.replace(/\/+$/g, "")
-      return part.replace(/^\/+/g, "").replace(/\/+$/g, "")
-    })
-    .filter(Boolean)
-    .join(SEP)
-}
-
-async function run(cmd) {
-  const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" })
-  await proc.exited
-}
+import * as path from "node:path"
+import { mkdir, writeFile, readFile } from "node:fs/promises"
 
 export default async () => {
+  const lastChannelFile = path.join(process.cwd(), ".data", "last-channel.json")
+  const outboxDir = path.join(process.cwd(), ".data", "outbox")
+
   return {
     tool: {
       send_channel_message: tool({
@@ -34,7 +19,7 @@ export default async () => {
 
           let target
           try {
-            const raw = await Bun.file(lastChannelFile).text()
+            const raw = await readFile(lastChannelFile, "utf-8")
             target = JSON.parse(raw)
           } catch {
             return "No last-used channel found yet."
@@ -48,9 +33,10 @@ export default async () => {
             return "Last-used channel data is invalid."
           }
 
-          await run(["mkdir", "-p", outboxDir])
-          const filePath = joinPath(outboxDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`)
-          await Bun.write(
+          await mkdir(outboxDir, { recursive: true })
+          const filePath = path.join(outboxDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`)
+
+          await writeFile(
             filePath,
             JSON.stringify(
               {

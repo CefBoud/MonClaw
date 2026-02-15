@@ -1,5 +1,6 @@
 import { ensureDir, readText, writeText } from "../utils/fs"
 import { joinPath } from "../utils/path"
+import { appendFile } from "node:fs/promises"
 
 export class MemoryStore {
   constructor(private readonly rootDir: string) {}
@@ -21,8 +22,7 @@ export class MemoryStore {
   async append(note: string, source?: string): Promise<void> {
     await this.ensureFile(this.filePath, "# Memory\n")
     const prefix = source ? `- (${source}) ` : "- "
-    const existing = await readText(this.filePath)
-    await writeText(this.filePath, `${existing}${prefix}${note.trim()}\n`)
+    await appendFile(this.filePath, `${prefix}${note.trim()}\n`)
   }
 
   private async ensureFile(file: string, initialContent = ""): Promise<void> {
