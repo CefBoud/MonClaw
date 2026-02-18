@@ -602,6 +602,14 @@ export class AssistantCore {
       sessionID: string;
       sessionStatus?: { type: string } | null;
       sessionStatusError?: string;
+      configModel?: string | null;
+      configError?: string;
+      connectedProviders?: string[];
+      defaultProviders?: Record<string, string> | null;
+      providerError?: string;
+      messageCount?: number;
+      lastRole?: string | null;
+      messagesError?: string;
     } = { sessionID };
 
     try {
